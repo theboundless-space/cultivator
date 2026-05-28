@@ -1,0 +1,131 @@
+name: Post to Bluesky
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/content/blog/**.md'
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
+
+      - name: Install Python dependencies
+        run: pip install requests --break-system-packages
+
+      - name: Check frontmatter and post to Bluesky
+        env:
+          BSKY_HANDLE: ${{ secrets.BSKY_HANDLE }}
+          BSKY_APP_PASSWORD: ${{ secrets.BSKY_APP_PASSWORD }}
+        run: |
+          python3 << 'PYEOF'
+          import subprocess, os, re, json, sys
+          import requests
+          from datetime import datetime, timezone
+
+          BASE_URL = "https://cultivator.theboundless.space"
+          handle = os.environ["BSKY_HANDLE"]
+          password = os.environ["BSKY_APP_PASSWORD"]
+
+          # Pega arquivos .md alterados no último commit
+          result = subprocess.run(
+              ["git", "diff", "--name-only", "HEAD~1", "HEAD"],
+              capture_output=True, text=True
+          )
+          changed = [
+              f for f in result.stdout.strip().split("\n")
+              if f.startswith("src/content/blog/") and f.endswith(".md")
+          ]
+
+          if not changed:
+              print("Nenhum post alterado.")
+              sys.exit(0)
+
+          def parse_frontmatter(content):
+              match = re.match(r"^---\s*\n(.*?)\n---", content, re.DOTALL)
+              if not match:
+                  return {}
+              fm = {}
+              for line in match.group(1).split("\n"):
+                  if ":" in line:
+                      key, _, val = line.partition(":")
+                      fm[key.strip()] = val.strip().strip("\"'")
+              return fm
+
+          for filepath in changed:
+              if not os.path.exists(filepath):
+                  continue
+
+              with open(filepath, "r") as f:
+                  content = f.read()
+
+              fm = parse_frontmatter(content)
+
+              if fm.get("bluesky") != "ready":
+                  print(f"Ignorando {filepath} — bluesky != ready")
+                  continue
+
+              resumo = fm.get("resumo_bsky", fm.get("description", ""))
+              title = fm.get("title", "")
+              description = fm.get("description", "")
+              slug = os.path.basename(filepath).replace(".md", "")
+              post_url = f"{BASE_URL}/posts/{slug}/"
+
+              print(f"Publicando: {title} → {post_url}")
+
+              # Autentica
+              session_resp = requests.post(
+                  "https://bsky.social/xrpc/com.atproto.server.createSession",
+                  json={"identifier": handle, "password": password}
+              )
+              session = session_resp.json()
+
+              if "error" in session:
+                  print(f"Erro de autenticação: {session}")
+                  sys.exit(1)
+
+              token = session["accessJwt"]
+              did = session["did"]
+
+              # Monta o texto respeitando o limite de 300 grafemas do Bluesky
+              url_len = len(post_url)
+              max_resumo = 300 - url_len - 2
+              if len(resumo) > max_resumo:
+                  text = resumo[:max_resumo] + "\n\n" + post_url
+              elif resumo:
+                  text = resumo + "\n\n" + post_url
+              else:
+                  text = post_url
+
+              # Cria o post com link card
+              record = {
+                  "$type": "app.bsky.feed.post",
+                  "text": text,
+                  "createdAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                  "embed": {
+                      "$type": "app.bsky.embed.external",
+                      "external": {
+                          "uri": post_url,
+                          "title": title,
+                          "description": description
+                      }
+                  }
+              }
+
+              resp = requests.post(
+                  "https://bsky.social/xrpc/com.atproto.repo.createRecord",
+                  headers={"Authorization": f"Bearer {token}"},
+                  json={"repo": did, "collection": "app.bsky.feed.post", "record": record}
+              )
+
+              if resp.status_code == 200:
+                  print("Publicado com sucesso no Bluesky!")
+              else:
+                  print(f"Erro ao publicar: {resp.text}")
+                  sys.exit(1)
+          PYEOF
