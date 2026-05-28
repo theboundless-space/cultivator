@@ -4,6 +4,8 @@ import sitemap from "@astrojs/sitemap";
 import remarkToc from "remark-toc";
 import remarkCollapse from "remark-collapse";
 import tailwindcss from "@tailwindcss/vite";
+import { envField } from "astro/config";
+
 
 export default defineConfig({
   site: "https://cultivator.theboundless.space",
@@ -11,6 +13,15 @@ export default defineConfig({
   i18n: {
     defaultLocale: "en",
     locales: ["en", "pt-BR"],
+  },
+  env: {
+  schema: {
+    PUBLIC_GOOGLE_SITE_VERIFICATION: envField.optional({
+      context: "client",
+      access: "public",
+      default: "",
+    }),
+  },
   },
   fonts: [
     {
