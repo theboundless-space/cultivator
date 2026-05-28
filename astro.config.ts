@@ -14,15 +14,16 @@ export default defineConfig({
     defaultLocale: "en",
     locales: ["en", "pt-BR"],
   },
-  env: {
+env: {
   schema: {
-    PUBLIC_GOOGLE_SITE_VERIFICATION: envField.optional({
+    PUBLIC_GOOGLE_SITE_VERIFICATION: envField.string({
       context: "client",
       access: "public",
+      optional: true,
       default: "",
     }),
   },
-  },
+},
   fonts: [
     {
       provider: fontProviders.google(),
