@@ -24,13 +24,15 @@ env: {
     }),
   },
 },
-  fonts: [
-    {
-      provider: fontProviders.google(),
-      name: "Google Sans Code",
-      cssVariable: "--font-google-sans-code",
-    },
-  ],
+fonts: [
+  {
+    provider: fontProviders.google(),
+    name: "Google Sans Code",
+    cssVariable: "--font-google-sans-code",
+    fallbacks: ["Courier New"],
+    display: "swap",
+  },
+],
   markdown: {
     remarkPlugins: [
       remarkToc,
