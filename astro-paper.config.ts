@@ -3,12 +3,12 @@ import { defineAstroPaperConfig } from "./src/types/config";
 export default defineAstroPaperConfig({
   site: {
     url: "https://cultivator.theboundless.space",
-    title: "at The Boundless",
+    title: "Cultivator at The Boundless",
     description: "Worldbuilding, lore e ficção especulativa.",
     author: "cultivator",
     profile: "https://bsky.app/profile/cultivator.theboundless.space",
     ogImage: "default-og.jpg",
-    lang: "pt-BR",
+    lang: "en-US",
     timezone: "America/Sao_Paulo",
     dir: "ltr",
   },
