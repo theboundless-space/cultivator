@@ -8,7 +8,7 @@ export default defineAstroPaperConfig({
     author: "cultivator",
     profile: "https://bsky.app/profile/cultivator.theboundless.space",
     ogImage: "default-og.jpg",
-    lang: "en-US",
+    lang: "en",
     timezone: "America/Sao_Paulo",
     dir: "ltr",
   },
