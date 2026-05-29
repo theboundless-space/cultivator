@@ -142,19 +142,22 @@ const ogImage = ogImageUrl
 <Content />
 
       <!-- Comentários via Bluesky (URL canônica) -->
-      <section id="bsky-comments" class="mt-12 border-t pt-8">
-        <h2 class="text-2xl font-semibold mb-6">Comentários via Bluesky</h2>
-        <div id="bsky-comments-inner">
-          <p class="text-sm opacity-60">Carregando comentários...</p>
-        </div>
-      </section>
+<section id="bsky-comments" class="mt-12 border-t pt-8">
+  <h2 class="text-2xl font-semibold mb-6">Bluesky Discussion</h2>
+  <div id="bsky-comments-inner">
+    <p class="text-sm opacity-60">Loading comments...</p>
+  </div>
+</section>
 
     </article>
 
 <script is:inline>
 (async function () {
-  const HANDLE = "cultivator.theboundless.space";
-  const API    = "https://public.api.bsky.app/xrpc";
+  const HANDLES = [
+    "cultivator.theboundless.space",
+    "cultivador.theboundless.space"
+  ];
+  const API = "https://public.api.bsky.app/xrpc";
   const pageUrl = window.location.origin + window.location.pathname.replace(/\/$/, "");
   const container = document.getElementById("bsky-comments-inner");
 
@@ -163,16 +166,16 @@ const ogImage = ogImageUrl
   }
   function timeAgo(iso) {
     const diff = (Date.now() - new Date(iso).getTime()) / 1000;
-    if (diff < 60)   return `${Math.floor(diff)}s atrás`;
-    if (diff < 3600) return `${Math.floor(diff/60)}m atrás`;
-    if (diff < 86400)return `${Math.floor(diff/3600)}h atrás`;
-    return `${Math.floor(diff/86400)}d atrás`;
+    if (diff < 60)   return Math.floor(diff) + "s ago";
+    if (diff < 3600) return Math.floor(diff/60) + "m ago";
+    if (diff < 86400)return Math.floor(diff/3600) + "h ago";
+    return Math.floor(diff/86400) + "d ago";
   }
-  function renderPost(post) {
+  function renderPost(post, depth) {
     const p = post.post ?? post;
     const author = p.author;
     const record = p.record;
-    return `<div style="display:flex;gap:12px;margin-bottom:20px;">
+    return `<div style="display:flex;gap:12px;margin-bottom:20px;margin-left:${depth*20}px;">
       <img src="${escapeHtml(author.avatar ?? '')}" alt="${escapeHtml(author.displayName ?? author.handle)}"
            style="width:40px;height:40px;border-radius:50%;flex-shrink:0;object-fit:cover;">
       <div style="flex:1;">
@@ -197,38 +200,57 @@ const ogImage = ogImageUrl
     if (thread.post) acc.push({ post: thread.post, depth });
     if (thread.replies) for (const r of thread.replies) collectReplies(r, acc, depth + 1);
   }
+
   try {
-    const searchRes = await fetch(`${API}/app.bsky.feed.searchPosts?q=${encodeURIComponent(pageUrl)}&author=${encodeURIComponent(HANDLE)}&limit=10`);
-    const { posts = [] } = await searchRes.json();
-    if (posts.length === 0) {
-      container.innerHTML = `<p style="opacity:0.6;font-size:0.9em;">Nenhuma discussão no Bluesky ainda.</p>`;
+    const allPosts = [];
+    for (const handle of HANDLES) {
+      const res = await fetch(
+        `${API}/app.bsky.feed.searchPosts?q=${encodeURIComponent(pageUrl)}&author=${encodeURIComponent(handle)}&limit=10`
+      );
+      const data = await res.json();
+      if (data.posts) allPosts.push(...data.posts);
+    }
+
+    if (allPosts.length === 0) {
+      container.innerHTML = `<p style="opacity:0.6;font-size:0.9em;">No discussion found on Bluesky yet.</p>`;
       return;
     }
+
     const allReplies = [];
-    for (const post of posts) {
-      const threadRes = await fetch(`${API}/app.bsky.feed.getPostThread?uri=${encodeURIComponent(post.uri)}&depth=6`);
+    for (const post of allPosts) {
+      const threadRes = await fetch(
+        `${API}/app.bsky.feed.getPostThread?uri=${encodeURIComponent(post.uri)}&depth=6`
+      );
       const { thread } = await threadRes.json();
       const replies = [];
       collectReplies(thread, replies);
       allReplies.push(...replies.slice(1));
     }
+
+    let html = `<p style="font-size:0.85em;opacity:0.7;margin-bottom:16px;">
+      ${allReplies.length} comment${allReplies.length !== 1 ? "s" : ""}
+      from ${allPosts.length} Bluesky post${allPosts.length !== 1 ? "s" : ""}
+    </p>`;
+
     if (allReplies.length === 0) {
-      container.innerHTML = posts.map(p =>
-        `<p style="font-size:0.85em;opacity:0.7;">Post no Bluesky: <a href="https://bsky.app/profile/${p.author.handle}/post/${p.uri.split('/').pop()}" target="_blank" rel="noopener">ver discussão</a></p>`
-      ).join('') + `<p style="opacity:0.6;font-size:0.9em;">Sem respostas ainda.</p>`;
-      return;
+      html += allPosts.map(p =>
+        `<p style="font-size:0.85em;opacity:0.7;">Bluesky post: <a href="https://bsky.app/profile/${p.author.handle}/post/${p.uri.split("/").pop()}" target="_blank" rel="noopener">view discussion</a></p>`
+      ).join("") + `<p style="opacity:0.6;font-size:0.9em;">No replies yet. Be the first to comment on Bluesky.</p>`;
+    } else {
+      for (const { post, depth } of allReplies) {
+        html += renderPost({ post }, depth);
+      }
     }
-    let html = `<p style="font-size:0.85em;opacity:0.7;margin-bottom:16px;">${allReplies.length} comentário${allReplies.length !== 1 ? 's' : ''}</p>`;
-    for (const { post, depth } of allReplies) {
-      html += `<div style="margin-left:${depth * 20}px;">${renderPost({ post })}</div>`;
-    }
+
     container.innerHTML = html;
   } catch (err) {
-    container.innerHTML = `<p style="opacity:0.6;font-size:0.9em;">Não foi possível carregar os comentários.</p>`;
+    container.innerHTML = `<p style="opacity:0.6;font-size:0.9em;">Could not load comments.</p>`;
     console.error("Bluesky comments error:", err);
   }
 })();
 </script>
+
+
 
     <hr class="my-8 border-dashed" />
 
