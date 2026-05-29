@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'src/content/blog/**.md'
+      - 'src/content/posts/**.md'
 
 jobs:
   post:
@@ -20,26 +20,25 @@ jobs:
 
       - name: Check frontmatter and post to Bluesky
         env:
-          BSKY_HANDLE: ${{ secrets.BSKY_HANDLE }}
-          BSKY_APP_PASSWORD: ${{ secrets.BSKY_APP_PASSWORD }}
+          BSKY_HANDLE_EN: ${{ secrets.BSKY_HANDLE_EN }}
+          BSKY_APP_PASSWORD_EN: ${{ secrets.BSKY_APP_PASSWORD_EN }}
+          BSKY_HANDLE_PT: ${{ secrets.BSKY_HANDLE_PT }}
+          BSKY_APP_PASSWORD_PT: ${{ secrets.BSKY_APP_PASSWORD_PT }}
         run: |
           python3 << 'PYEOF'
-          import subprocess, os, re, json, sys
+          import subprocess, os, re, sys
           import requests
           from datetime import datetime, timezone
 
           BASE_URL = "https://cultivator.theboundless.space"
-          handle = os.environ["BSKY_HANDLE"]
-          password = os.environ["BSKY_APP_PASSWORD"]
 
-          # Pega arquivos .md alterados no último commit
           result = subprocess.run(
               ["git", "diff", "--name-only", "HEAD~1", "HEAD"],
               capture_output=True, text=True
           )
           changed = [
               f for f in result.stdout.strip().split("\n")
-              if f.startswith("src/content/blog/") and f.endswith(".md")
+              if f.startswith("src/content/posts/") and f.endswith(".md")
           ]
 
           if not changed:
@@ -57,55 +56,31 @@ jobs:
                       fm[key.strip()] = val.strip().strip("\"'")
               return fm
 
-          for filepath in changed:
-              if not os.path.exists(filepath):
-                  continue
-
-              with open(filepath, "r") as f:
-                  content = f.read()
-
-              fm = parse_frontmatter(content)
-
-              if fm.get("bluesky") != "ready":
-                  print(f"Ignorando {filepath} — bluesky != ready")
-                  continue
-
-              resumo = fm.get("resumo_bsky", fm.get("description", ""))
-              title = fm.get("title", "")
-              description = fm.get("description", "")
-              slug = os.path.basename(filepath).replace(".md", "")
-              post_url = f"{BASE_URL}/posts/{slug}/"
-
-              print(f"Publicando: {title} → {post_url}")
-
-              # Autentica
+          def post_to_bluesky(handle, password, text, post_url, title, description):
               session_resp = requests.post(
                   "https://bsky.social/xrpc/com.atproto.server.createSession",
                   json={"identifier": handle, "password": password}
               )
               session = session_resp.json()
-
               if "error" in session:
-                  print(f"Erro de autenticação: {session}")
-                  sys.exit(1)
+                  print(f"Erro de autenticação ({handle}): {session}")
+                  return False
 
               token = session["accessJwt"]
               did = session["did"]
 
-              # Monta o texto respeitando o limite de 300 grafemas do Bluesky
               url_len = len(post_url)
               max_resumo = 300 - url_len - 2
-              if len(resumo) > max_resumo:
-                  text = resumo[:max_resumo] + "\n\n" + post_url
-              elif resumo:
-                  text = resumo + "\n\n" + post_url
+              if len(text) > max_resumo:
+                  full_text = text[:max_resumo] + "\n\n" + post_url
+              elif text:
+                  full_text = text + "\n\n" + post_url
               else:
-                  text = post_url
+                  full_text = post_url
 
-              # Cria o post com link card
               record = {
                   "$type": "app.bsky.feed.post",
-                  "text": text,
+                  "text": full_text,
                   "createdAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
                   "embed": {
                       "$type": "app.bsky.embed.external",
@@ -124,8 +99,44 @@ jobs:
               )
 
               if resp.status_code == 200:
-                  print("Publicado com sucesso no Bluesky!")
+                  print(f"Publicado com sucesso em @{handle}!")
+                  return True
               else:
-                  print(f"Erro ao publicar: {resp.text}")
-                  sys.exit(1)
+                  print(f"Erro ao publicar em @{handle}: {resp.text}")
+                  return False
+
+          handle_en = os.environ.get("BSKY_HANDLE_EN", "")
+          password_en = os.environ.get("BSKY_APP_PASSWORD_EN", "")
+          handle_pt = os.environ.get("BSKY_HANDLE_PT", "")
+          password_pt = os.environ.get("BSKY_APP_PASSWORD_PT", "")
+
+          for filepath in changed:
+              if not os.path.exists(filepath):
+                  continue
+
+              with open(filepath, "r") as f:
+                  content = f.read()
+
+              fm = parse_frontmatter(content)
+
+              if fm.get("bluesky") != "true":
+                  print(f"Ignorando {filepath} — bluesky != true")
+                  continue
+
+              title = fm.get("title", "")
+              description = fm.get("description", "")
+              slug = fm.get("slug") or os.path.basename(filepath).replace(".md", "")
+              post_url = f"{BASE_URL}/posts/{slug}/"
+
+              resumo_en = fm.get("resumo_bsky_en", "").strip()
+              resumo_pt = fm.get("resumo_bsky_pt", "").strip()
+
+              print(f"Processando: {title} → {post_url}")
+
+              if resumo_en and handle_en and password_en:
+                  post_to_bluesky(handle_en, password_en, resumo_en, post_url, title, description)
+
+              if resumo_pt and handle_pt and password_pt:
+                  post_to_bluesky(handle_pt, password_pt, resumo_pt, post_url, title, description)
+
           PYEOF
