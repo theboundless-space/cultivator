@@ -4,7 +4,7 @@ export default defineAstroPaperConfig({
   site: {
     url: "https://cultivator.theboundless.space",
     title: "Cultivator at The Boundless",
-    description: "Worldbuilding, lore e ficção especulativa.",
+    description: "On the magic and cultivation of life",
     author: "cultivator",
     profile: "https://bsky.app/profile/cultivator.theboundless.space",
     ogImage: "default-og.jpg",
