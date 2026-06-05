@@ -3,7 +3,7 @@ import { defineAstroPaperConfig } from "./src/types/config";
 export default defineAstroPaperConfig({
   site: {
     url: "https://cultivator.theboundless.space",
-    title: "Cultivator at The Boundless",
+    title: "Cultivator in The Boundless",
     description: "On the magic and cultivation of life",
     author: "cultivator",
     profile: "https://bsky.app/profile/cultivator.theboundless.space",
